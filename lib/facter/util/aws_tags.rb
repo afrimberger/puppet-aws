@@ -12,8 +12,11 @@ module Facter::Util::AWSTags
   def self.get_tags
 
     httpcall = Net::HTTP.new(INSTANCE_HOST)
-    resp, instance_id = httpcall.get2(INSTANCE_ID_URL)
-    resp, region = httpcall.get2(INSTANCE_REGION_URL)
+    resp = httpcall.get2(INSTANCE_ID_URL)
+    instance_id = resp.body
+
+    resp = httpcall.get2(INSTANCE_REGION_URL)
+    region = resp.body
 
     # Cut out availability zone marker.
     # For example if region == "us-east-1c" after cutting out it will be
@@ -25,17 +28,18 @@ module Facter::Util::AWSTags
     # required if your instances are in other zone than the
     # gem's default one (us-east-1).
 
-    AWS.config(
-        :credential_provider => AWS::Core::CredentialProviders::EC2Provider.new,
+    creds = Aws::SharedCredentials.new
+    ec2 = Aws::EC2::Resource.new(
+        :credentials => creds,
         :region => region)
 
-    tags = AWS.ec2.instances[instance_id].tags.to_h
+    tags = ec2.instance(instance_id).tags
 
     # tags is a hash so create a fact for each
-    tags.each_pair do | key, value |
-      symbol = "ec2_tag_#{key.gsub(/\-|\//, '_')}".to_sym
-      Facter.add(symbol) { setcode { value } }
+    tags.each do | tag |
+      symbol = "ec2_tag_#{tag.key.gsub(/\-|\//, '_')}".to_sym
+      Facter.add(symbol) { setcode { tag.value } }
     end
   end
 
-end
+end 
